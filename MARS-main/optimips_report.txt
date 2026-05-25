@@ -1,0 +1,49 @@
+OptiMIPS Optimization Report
+============================
+
+Summary
+-------
+Instruction count: 7
+Original stalls: 4
+Optimized stalls: 0
+Original CPI: 1.571
+Optimized CPI: 1.000
+CPI improvement: 36.4%
+
+Thesis Table Row
+----------------
+Benchmark, Instructions, Stalls Before, Stalls After, CPI Before, CPI After, Improvement
+OptiMIPS run, 7, 4, 0, 1.571, 1.000, 36.4%
+
+Hazards Found
+-------------
+Line 1 -> Line 2 [RAW] add  $t0, $t1, $t2    # writes $t0 -> lw   $t3, 0($t0)      # RAW: reads $t0 immediately
+Line 1 -> Line 5 [RAW] add  $t0, $t1, $t2    # writes $t0 -> mul  $t8, $t5, $t0    # reads $t5, $t0 (both available after reorder)
+Line 1 -> Line 6 [RAW] add  $t0, $t1, $t2    # writes $t0 -> sw   $t8, 4($t0)      # store result
+Line 2 -> Line 3 [RAW] lw   $t3, 0($t0)      # RAW: reads $t0 immediately -> sub  $t4, $t3, $t1    # RAW: reads $t3 before lw done
+Line 2 -> Line 6 [MEM] lw   $t3, 0($t0)      # RAW: reads $t0 immediately -> sw   $t8, 4($t0)      # store result
+Line 4 -> Line 5 [RAW] add  $t5, $t6, $t7    # independent - safe to move up -> mul  $t8, $t5, $t0    # reads $t5, $t0 (both available after reorder)
+Line 5 -> Line 6 [RAW] mul  $t8, $t5, $t0    # reads $t5, $t0 (both available after reorder) -> sw   $t8, 4($t0)      # store result
+
+Instruction Moves
+-----------------
+add moved from line 4 to line 2: add  $t5, $t6, $t7    # independent - safe to move up
+lw moved from line 2 to line 3: lw   $t3, 0($t0)      # RAW: reads $t0 immediately
+mul moved from line 5 to line 4: mul  $t8, $t5, $t0    # reads $t5, $t0 (both available after reorder)
+sub moved from line 3 to line 5: sub  $t4, $t3, $t1    # RAW: reads $t3 before lw done
+
+Plain English Explanation
+-------------------------
+The original program had instruction orderings where later instructions needed register values before the simplified pipeline model considered those values ready.
+OptiMIPS built a dependency graph first, so it only moved instructions when program meaning stayed safe.
+It then selected safe ready instructions that could fill stall cycles, reducing wait time and improving CPI when independent work was available.
+
+Optimized Instruction Order
+---------------------------
+1. add  $t0, $t1, $t2    # writes $t0
+2. add  $t5, $t6, $t7    # independent - safe to move up
+3. lw   $t3, 0($t0)      # RAW: reads $t0 immediately
+4. mul  $t8, $t5, $t0    # reads $t5, $t0 (both available after reorder)
+5. sub  $t4, $t3, $t1    # RAW: reads $t3 before lw done
+6. sw   $t8, 4($t0)      # store result
+7. add  $zero, $zero, $zero  # nop
